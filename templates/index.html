@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Block Blast AI</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #121212; color: #e0e0e0; margin: 0; padding: 20px; }
+        .container { display: flex; gap: 20px; max-width: 1200px; margin: 0 auto; }
+        
+        .panel { background: #1e1e1e; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+        
+        #left-panel { flex: 1; display: flex; flex-direction: column; align-items: center; }
+        #right-panel { flex: 0 0 450px; display: flex; flex-direction: column; gap: 20px; max-height: 90vh; }
+        
+        /* Main Game Grid */
+        .grid-container { 
+            position: relative; width: 500px; height: 500px; 
+            border: 4px solid #333; background: #000; 
+            border-radius: 4px; box-shadow: 0 0 20px rgba(0,0,0,0.5); 
+        }
+        
+        .grid-img { 
+            width: 100%; height: 100%; object-fit: contain; 
+            opacity: 0.4; /* Slightly darker to let overlay pop */
+            transition: opacity 0.3s;
+        }
+        
+        .grid-overlay { 
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
+            display: grid; grid-template-columns: repeat(8, 1fr); grid-template-rows: repeat(8, 1fr);
+        }
+        
+        .cell { 
+            border: 1px solid rgba(255,255,255,0.3); /* Stronger grid lines */
+            cursor: pointer; position: relative; 
+            transition: all 0.1s;
+        }
+        .cell:hover { background: rgba(255,255,255,0.1); }
+        
+        /* High Contrast Filled State */
+        .cell.filled { 
+            background: rgba(255, 152, 0, 0.3); /* Tint the whole cell */
+        }
+        .cell.filled::after { 
+            content: ''; position: absolute; 
+            top: 2px; left: 2px; right: 2px; bottom: 2px; /* Bigger inner block */
+            background: #ff9800; 
+            border: 1px solid #fff; /* White border to separate from background noise */
+            border-radius: 2px; 
+            opacity: 1.0; 
+            box-shadow: 0 0 10px rgba(255, 152, 0, 0.6);
+        }
+        
+        /* Solution Indicators */
+        .move-indicator {
+            position: absolute; border: 4px solid white; z-index: 10; pointer-events: none;
+            box-sizing: border-box;
+            background: rgba(255,255,255,0.15);
+            box-shadow: 0 0 5px rgba(0,0,0,0.5);
+        }
+        .move-label {
+            position: absolute; color: white; font-weight: bold; font-size: 18px; 
+            background: #000; padding: 4px; border-radius: 50%;
+            top: -15px; left: -15px; border: 2px solid white; width: 24px; height: 24px;
+            display: flex; align-items: center; justify-content: center;
+            z-index: 20;
+        }
+        
+        /* Controls */
+        .controls { display: flex; gap: 15px; margin-bottom: 20px; justify-content: center; align-items: center; }
+        button.action-btn { 
+            padding: 12px 24px; font-size: 16px; font-weight: bold; border: none; border-radius: 8px; cursor: pointer; 
+            background: #2196F3; color: white; transition: transform 0.1s, background 0.2s;
+        }
+        button.action-btn:hover { background: #1976D2; transform: translateY(-2px); }
+        button.action-btn:active { transform: translateY(0); }
+        button.solve-btn { background: #4CAF50; }
+        button.solve-btn:hover { background: #388E3C; }
+        button.clear-btn { background: #F44336; }
+        button.clear-btn:hover { background: #D32F2F; }
+        button.secondary-btn { background: #555; font-size: 14px; padding: 10px 15px;}
+        button.secondary-btn:hover { background: #666; }
+        
+        /* Slots */
+        .slots { display: flex; flex-direction: row; gap: 10px; margin-bottom: 10px; }
+        .slot-btn { 
+            flex: 1; background: #2c2c2c; color: #aaa;
+            border: 2px solid #444; border-radius: 8px;
+            height: 100px; display: flex; flex-direction: column; align-items: center; justify-content: center;
+            cursor: pointer; transition: all 0.2s;
+            position: relative;
+        }
+        .slot-btn:hover { background: #333; }
+        .slot-btn.active { border-color: #2196F3; background: #2c3e50; color: white; box-shadow: 0 0 10px rgba(33, 150, 243, 0.3); }
+        .slot-content { pointer-events: none; }
+        
+        /* Library & Mini Shapes */
+        .library { 
+            flex: 1; overflow-y: auto; background: #252525; padding: 15px; border-radius: 8px; 
+            border: 1px solid #333;
+        }
+        /* Custom Scrollbar */
+        .library::-webkit-scrollbar { width: 8px; }
+        .library::-webkit-scrollbar-track { background: #1e1e1e; }
+        .library::-webkit-scrollbar-thumb { background: #555; border-radius: 4px; }
+        .library::-webkit-scrollbar-thumb:hover { background: #777; }
+
+        .shape-category { 
+            font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: #888; 
+            margin: 15px 0 8px; border-bottom: 1px solid #444; padding-bottom: 2px; 
+        }
+        .shape-category:first-child { margin-top: 0; }
+        
+        .shape-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(60px, 1fr)); gap: 8px; }
+        
+        .shape-btn { 
+            background: #333; border: 1px solid #444; border-radius: 6px;
+            padding: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+            height: 60px; transition: background 0.2s;
+        }
+        .shape-btn:hover { background: #444; border-color: #666; }
+        
+        /* Mini Grid for Shapes */
+        .mini-grid {
+            display: grid; gap: 2px;
+        }
+        .mini-cell {
+            width: 10px; height: 10px; border-radius: 2px;
+        }
+        .mini-cell.filled { background: #00bcd4; box-shadow: 0 0 2px #00bcd4; }
+        .mini-cell.empty { background: transparent; }
+
+        /* Slot rendered shape needs to be bigger */
+        .slot-shape .mini-cell { width: 14px; height: 14px; }
+        .slot-shape .mini-cell.filled { background: #fff; box-shadow: none; }
+        
+        #status { font-weight: bold; margin-left: 20px; color: #ccc; }
+    </style>
+</head>
+<body>
+
+    <div class="controls">
+        <button class="action-btn" onclick="captureGrid()">📸 Capture</button>
+        <button class="action-btn" onclick="invertGrid()" style="background: #9b59b6;">🔄 Invert</button>
+        <button class="action-btn solve-btn" onclick="solve()">🧠 Solve</button>
+        <button class="action-btn clear-btn" onclick="clearSelection()">❌ Clear</button>
+    </div>
+    
+    <div style="text-align: center; margin-bottom: 15px;">
+        <button class="action-btn secondary-btn" onclick="toggleImage()">👁️ Toggle Screenshot</button>
+        <span id="status">Ready. Connect phone & capture.</span>
+    </div>
+
+    <div class="container">
+        <!-- Left: Grid -->
+        <div id="left-panel" class="panel">
+            <div class="grid-container" id="gridContainer">
+                <img id="gridImage" class="grid-img" src="">
+                <div class="grid-overlay" id="gridOverlay">
+                    <!-- Cells generated by JS -->
+                </div>
+                <div id="solutionLayer" style="position: absolute; top:0; left:0; width:100%; height:100%; pointer-events:none;"></div>
+            </div>
+            <p style="color: #666; font-size: 14px; margin-top: 10px;">Tip: Click grid cells to fix detection errors.</p>
+        </div>
+
+        <!-- Right: Selection -->
+        <div id="right-panel" class="panel">
+            <div class="slots">
+                <div class="slot-btn active" id="slot0" onclick="selectSlot(0)">
+                    <span style="font-size: 12px; margin-bottom: 5px;">Slot 1</span>
+                    <div id="slot0-content" class="slot-content">(Empty)</div>
+                </div>
+                <div class="slot-btn" id="slot1" onclick="selectSlot(1)">
+                    <span style="font-size: 12px; margin-bottom: 5px;">Slot 2</span>
+                    <div id="slot1-content" class="slot-content">(Empty)</div>
+                </div>
+                <div class="slot-btn" id="slot2" onclick="selectSlot(2)">
+                    <span style="font-size: 12px; margin-bottom: 5px;">Slot 3</span>
+                    <div id="slot2-content" class="slot-content">(Empty)</div>
+                </div>
+            </div>
+            
+            <div class="library">
+                {% for category, names in categories.items() %}
+                <div class="shape-category">{{ category }}</div>
+                <div class="shape-grid">
+                    {% for name in names %}
+                    {% set matrix = all_shapes[name] %}
+                    <!-- Render Button with Visual Shape -->
+                    <button class="shape-btn" onclick="assignShape('{{ name }}')" title="{{ name }}">
+                        <div class="mini-grid" style="grid-template-columns: repeat({{ matrix[0]|length }}, 1fr);">
+                            {% for row in matrix %}
+                                {% for val in row %}
+                                    <div class="mini-cell {{ 'filled' if val else 'empty' }}"></div>
+                                {% endfor %}
+                            {% endfor %}
+                        </div>
+                    </button>
+                    {% endfor %}
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Hidden Store for JS to know what shapes look like for the Slot display -->
+    <script>
+        const SHAPE_DEFS = {{ all_shapes | tojson }};
+    </script>
+
+    <script>
+        let currentSlot = 0;
+        let selectedShapes = [null, null, null];
+        let gridState = Array(8).fill().map(() => Array(8).fill(0));
+        let imgVisible = true;
+
+        function initGrid() {
+            const overlay = document.getElementById('gridOverlay');
+            overlay.innerHTML = '';
+            for (let r=0; r<8; r++) {
+                for (let c=0; c<8; c++) {
+                    const div = document.createElement('div');
+                    div.className = 'cell';
+                    div.id = `cell-${r}-${c}`;
+                    div.onclick = () => toggleCell(r, c);
+                    overlay.appendChild(div);
+                }
+            }
+        }
+        
+        function toggleImage() {
+            imgVisible = !imgVisible;
+            const img = document.getElementById('gridImage');
+            img.style.opacity = imgVisible ? 0.4 : 0;
+        }
+
+        function selectSlot(idx) {
+            currentSlot = idx;
+            document.querySelectorAll('.slot-btn').forEach((btn, i) => {
+                if (i === idx) btn.classList.add('active');
+                else btn.classList.remove('active');
+            });
+        }
+
+        function assignShape(name) {
+            selectedShapes[currentSlot] = name;
+            
+            // Render the shape into the slot button
+            const matrix = SHAPE_DEFS[name];
+            const contentDiv = document.getElementById(`slot${currentSlot}-content`);
+            contentDiv.innerHTML = ''; // Clear text
+            
+            const gridDiv = document.createElement('div');
+            gridDiv.className = 'mini-grid slot-shape';
+            gridDiv.style.gridTemplateColumns = `repeat(${matrix[0].length}, 1fr)`;
+            
+            matrix.forEach(row => {
+                row.forEach(val => {
+                    const cell = document.createElement('div');
+                    cell.className = `mini-cell ${val ? 'filled' : 'empty'}`;
+                    gridDiv.appendChild(cell);
+                });
+            });
+            contentDiv.appendChild(gridDiv);
+            
+            // Auto advance
+            selectSlot((currentSlot + 1) % 3);
+
+            // Auto Solve if all slots are full
+            if (!selectedShapes.includes(null)) {
+                solve();
+            }
+        }
+
+        function clearSelection() {
+            selectedShapes = [null, null, null];
+            [0,1,2].forEach(i => {
+                document.getElementById(`slot${i}-content`).innerText = '(Empty)';
+            });
+            selectSlot(0);
+            document.getElementById('solutionLayer').innerHTML = '';
+        }
+
+        function toggleCell(r, c) {
+            const val = 1 - gridState[r][c];
+            gridState[r][c] = val;
+            updateVisualGrid();
+            
+            fetch('/update_grid', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({r, c, val})
+            });
+        }
+
+        function updateVisualGrid() {
+            for (let r=0; r<8; r++) {
+                for (let c=0; c<8; c++) {
+                    const cell = document.getElementById(`cell-${r}-${c}`);
+                    if (gridState[r][c]) cell.classList.add('filled');
+                    else cell.classList.remove('filled');
+                }
+            }
+        }
+
+        function captureGrid() {
+            document.getElementById('status').innerText = 'Capturing...';
+            document.getElementById('status').style.color = '#ccc';
+            
+            fetch('/capture', {method: 'POST'})
+                .then(r => r.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        document.getElementById('gridImage').src = data.image_url;
+                        gridState = data.grid;
+                        updateVisualGrid();
+                        // Clear solution and selection on new capture
+                        clearSelection(); 
+                        document.getElementById('status').innerText = 'Captured.';
+                        document.getElementById('status').style.color = '#4CAF50';
+                    } else {
+                        alert(data.message);
+                        document.getElementById('status').innerText = 'Error.';
+                        document.getElementById('status').style.color = '#F44336';
+                    }
+                });
+        }
+        
+        function invertGrid() {
+            fetch('/invert_grid', {method: 'POST'})
+                .then(r => r.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        gridState = data.grid;
+                        updateVisualGrid();
+                        document.getElementById('solutionLayer').innerHTML = '';
+                    }
+                });
+        }
+
+        function solve() {
+            document.getElementById('status').innerText = 'Calculating best moves...';
+            fetch('/solve', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({shapes: selectedShapes})
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    drawSolution(data.moves);
+                    document.getElementById('status').innerText = `Solved! Score Potential: ${data.score}`;
+                } else {
+                    alert(data.message);
+                    document.getElementById('status').innerText = 'Failed.';
+                    document.getElementById('status').style.color = '#F44336';
+                }
+            });
+        }
+
+        function drawSolution(moves) {
+            const layer = document.getElementById('solutionLayer');
+            layer.innerHTML = '';
+            
+            const colors = ['#e74c3c', '#2ecc71', '#2980b9']; // Red, Green, Blue
+            const cellW = layer.clientWidth / 8;
+            const cellH = layer.clientHeight / 8;
+
+            moves.forEach((move, i) => {
+                const color = colors[i];
+                const matrix = move.matrix;
+                
+                matrix.forEach((row, pr) => {
+                    row.forEach((val, pc) => {
+                        if (val === 1) {
+                            const r = move.r + pr;
+                            const c = move.c + pc;
+                            
+                            const div = document.createElement('div');
+                            div.className = 'move-indicator';
+                            div.style.left = (c * cellW) + 'px';
+                            div.style.top = (r * cellH) + 'px';
+                            div.style.width = cellW + 'px';
+                            div.style.height = cellH + 'px';
+                            div.style.borderColor = color;
+                            
+                            // Add number to the first block of the shape
+                            if (pr === 0 && pc === 0) {
+                                const lbl = document.createElement('div');
+                                lbl.className = 'move-label';
+                                lbl.innerText = i + 1;
+                                div.appendChild(lbl);
+                            }
+                            
+                            layer.appendChild(div);
+                        }
+                    });
+                });
+            });
+        }
+
+        initGrid();
+
+        // Keybinds: Enter or Space to Capture
+        document.addEventListener('keydown', function(event) {
+            // Don't capture if user is typing in an input field (like a number box)
+            if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA') {
+                return;
+            }
+
+            if (event.code === 'Enter' || event.code === 'Space') {
+                event.preventDefault(); // Prevent scrolling on Space
+                captureGrid();
+            }
+        });
+    </script>
+</body>
+</html>

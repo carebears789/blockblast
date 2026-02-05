@@ -1,4 +1,5 @@
 # shapes.py
+import numpy as np
 
 # Definitions of block shapes for Block Blast
 # Represented as list of coordinates [(r, c), ...] relative to top-left (0,0)
@@ -186,3 +187,49 @@ SHAPE_CATEGORIES = {
         "Diag2_R", "Diag2_L", "Diag3_R", "Diag3_L"
     ]
 }
+
+def trim_matrix(matrix):
+    """Removes empty rows and cols from binary matrix."""
+    if not matrix: return []
+    
+    # Convert to numpy for easy slicing
+    arr = np.array(matrix)
+    if arr.size == 0: return []
+    
+    # Rows with at least one 1
+    rows = np.any(arr, axis=1)
+    # Cols with at least one 1
+    cols = np.any(arr, axis=0)
+    
+    if not np.any(rows) or not np.any(cols):
+        return []
+        
+    rmin, rmax = np.where(rows)[0][[0, -1]]
+    cmin, cmax = np.where(cols)[0][[0, -1]]
+    
+    return arr[rmin:rmax+1, cmin:cmax+1].tolist()
+
+def identify_shape(matrix):
+    """
+    Matches a binary matrix (list of lists) to a known shape name.
+    Returns the shape name (str) or None if no match found.
+    """
+    if not matrix:
+        return None
+        
+    # Normalize input matrix to list of lists if it's numpy or tuple
+    if hasattr(matrix, 'tolist'):
+        matrix = matrix.tolist()
+        
+    # Trim empty borders
+    try:
+        trimmed = trim_matrix(matrix)
+    except:
+        trimmed = matrix # Fallback if numpy not avail or error
+    
+    # Simple direct match
+    for name, shape_data in SHAPES.items():
+        if shape_data == trimmed:
+            return name
+            
+    return None

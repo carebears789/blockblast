@@ -7,7 +7,7 @@ import time
 # Local modules
 import capture
 import image_processing
-from shapes import SHAPES, SHAPE_CATEGORIES
+from shapes import SHAPES, SHAPE_CATEGORIES, identify_shape
 from solver_logic import BlockBlastSolver
 
 app = Flask(__name__)
@@ -29,17 +29,24 @@ def do_capture():
         if raw_img is None:
             return jsonify({"status": "error", "message": "Failed to capture image. Check ADB connection."})
         
-        state, processed_img = image_processing.process_grid(raw_img)
+        state, processed_img, detected_shapes = image_processing.process_grid(raw_img)
         CURRENT_GRID_STATE = state
         
         # Save image
         cv2.imwrite(CURRENT_IMG_PATH, processed_img)
         
-        # Return the grid state and a timestamp to force image reload
+        # Identify detected shapes
+        identified_shapes = []
+        for matrix in detected_shapes:
+            name = identify_shape(matrix)
+            identified_shapes.append(name if name else "Unknown")
+
+        # Return the grid state, timestamp, and identified shapes
         return jsonify({
             "status": "success",
             "grid": state.tolist(),
-            "image_url": f"{CURRENT_IMG_PATH}?t={int(time.time())}"
+            "image_url": f"{CURRENT_IMG_PATH}?t={int(time.time())}",
+            "detected_shapes": identified_shapes
         })
     except Exception as e:
         print(f"Capture Error: {e}")

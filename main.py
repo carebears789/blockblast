@@ -8,7 +8,7 @@ import base64
 # Local modules
 import capture
 import image_processing
-from shapes import SHAPES, SHAPE_CATEGORIES
+from shapes import SHAPES, SHAPE_CATEGORIES, identify_shape
 from solver_logic import BlockBlastSolver
 
 class BlockBlastApp:
@@ -151,22 +151,63 @@ class BlockBlastApp:
         def task():
             try:
                 raw_img = capture.get_screen()
-                state, processed_img = image_processing.process_grid(raw_img)
+                # Debug: Save the last capture
+                import os
+                abs_path = os.path.abspath("last_capture.jpg")
+                cv2.imwrite(abs_path, raw_img)
+                
+                with open("debug_log.txt", "a") as f:
+                    f.write(f"Captured image saved to: {abs_path}\n")
+                
+                state, processed_img, detected_shapes = image_processing.process_grid(raw_img)
                 
                 # Update UI in main thread
-                self.root.after(0, lambda: self.on_capture_complete(state, processed_img))
+                self.root.after(0, lambda: self.on_capture_complete(state, processed_img, detected_shapes))
             except Exception as e:
+                with open("debug_log.txt", "a") as f:
+                    f.write(f"Capture Task Error: {e}\n")
+                print(f"Capture Task Error: {e}")
+                import traceback
+                traceback.print_exc()
                 self.root.after(0, lambda: messagebox.showerror("Error", str(e)))
                 self.root.after(0, lambda: self.status_var.set("Capture failed."))
         
         threading.Thread(target=task).start()
 
-    def on_capture_complete(self, state, img):
+    def on_capture_complete(self, state, img, detected_shapes=None):
+        msg = f"DEBUG: detected_shapes: {len(detected_shapes) if detected_shapes else 0}\n"
+        
         self.grid_state = state
         self.current_grid_image = img
         self.solution_moves = None # Reset previous solution
+        
+        # Auto-fill shapes if detected
+        if detected_shapes:
+            self.selected_shapes = [None, None, None]
+            for i, matrix in enumerate(detected_shapes):
+                if i >= 3: break
+                
+                # Try to identify
+                name = identify_shape(matrix)
+                msg += f"Slot {i}: {name} (Mat: {matrix})\n"
+                
+                if name:
+                    self.selected_shapes[i] = name
+                    self.slot_buttons[i].config(text=f"Slot {i+1}: {name}")
+                else:
+                    self.slot_buttons[i].config(text=f"Slot {i+1}: (Unknown)")
+            
+            # Update UI highlight to first empty slot
+            first_empty = 0
+            for k in range(3):
+                if self.selected_shapes[k] is None:
+                    first_empty = k
+                    break
+            self.select_slot(first_empty)
+            
         self.redraw_grid()
-        self.status_var.set("Capture complete. Verify grid and select shapes.")
+        self.status_var.set("Capture complete. Verify grid and shapes.")
+        messagebox.showinfo("Debug Info", msg)
 
     def redraw_grid(self):
         if self.current_grid_image is None:

@@ -318,6 +318,20 @@
                         updateVisualGrid();
                         // Clear solution and selection on new capture
                         clearSelection(); 
+                        
+                        // Auto-assign detected shapes
+                        if (data.detected_shapes && data.detected_shapes.length > 0) {
+                            console.log("Detected shapes:", data.detected_shapes);
+                            data.detected_shapes.forEach((name, i) => {
+                                if (i < 3 && name !== "Unknown") {
+                                    setTimeout(() => {
+                                        selectSlot(i);
+                                        assignShape(name);
+                                    }, i * 100);
+                                }
+                            });
+                        }
+
                         document.getElementById('status').innerText = 'Captured.';
                         document.getElementById('status').style.color = '#4CAF50';
                     } else {
